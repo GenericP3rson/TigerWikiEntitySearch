@@ -1,0 +1,125 @@
+CREATE QUERY jaccard_pagerank_score(VERTEX source, STRING e_type, STRING rev_e_type, 
+ INT top_k = 100, BOOL print_accum = TRUE, STRING similarity_edge_type = "", STRING file_path = "", FLOAT max_change=0.001, 
+  INT max_iter=25, FLOAT damping=0.85, STRING result_attr =  "", BOOL display_edges = FALSE) FOR GRAPH OurGraph { 
+/* 
+Calculates the Jaccard Similarity between a given vertex and every other vertex.
+  Jaccard similarity = intersection_size / (size_A + size_B - intersection_size)
+Parameters:
+ source: start vertex                           top_k: #top scores to report
+ e_type: directed edge types to traverse        print_accum: print JSON output
+ rev_e_type: reverse edge types to traverse     file_path: file to write CSV output to
+ similarity_edge_type: edge type for storing vertex-vertex similarity scores
+
+  This query current supports only a single edge type (not a set of types) - 8/13/20
+*/
+  TYPEDEF TUPLE<VERTEX Vertex_ID, FLOAT score> Vertex_Score;
+
+  SumAccum<INT> @sum_intersection_size, @@sum_set_size_A, @sum_set_size_B;
+  SumAccum<FLOAT> @sum_similarity;
+   SetAccum<VERTEX> @entities;
+    MaxAccum<FLOAT> @weight;    # max score change in an iteration
+    SumAccum<FLOAT> @score;
+
+  FILE f (file_path);
+   
+HeapAccum<Vertex_Score>(top_k, score DESC) @@top_scores_heap;
+MaxAccum<FLOAT> @@max_diff = 9999;    # max score change in an iteration
+SumAccum<FLOAT> @sum_recvd_score = 0; # sum of scores each vertex receives FROM neighbors
+SumAccum<FLOAT> @sum_score = 1;           # initial score for every vertex is 1.
+SetAccum<EDGE> @@edge_set;             # list of all edges, if display is needed
+SumAccum<FLOAT> @sum_total_wt;
+      OrAccum @or_is_source;
+  SumAccum<FLOAT> @sum_received_score = 0; # sum of scores each vertex receives FROM neighbors
+
+
+
+  Start (ANY) = {source};
+  Start = SELECT s
+    FROM Start:s
+    ACCUM @@sum_set_size_A += s.outdegree(e_type);
+
+  Subjects = SELECT t
+       FROM Start:s-(e_type:e)-:t;
+
+  Others = SELECT t
+     FROM Subjects:s -(rev_e_type:e)- :t
+     WHERE t != source
+     ACCUM 
+         t.@sum_intersection_size += 1,
+         t.@sum_set_size_B = t.outdegree(e_type)
+     POST-ACCUM 
+         t.@sum_similarity = t.@sum_intersection_size*1.0/(@@sum_set_size_A + t.@sum_set_size_B - t.@sum_intersection_size)
+     ORDER BY t.@sum_similarity DESC
+     LIMIT top_k;
+
+  IF file_path != "" THEN
+      f.println("Vertex1", "Vertex2", "Similarity");
+  END;
+  
+  Others = SELECT s FROM Others:s - (DOC_ENTITY:e) - Entity:t
+     ACCUM s.@entities += t
+         POST-ACCUM 
+         IF similarity_edge_type != "" THEN
+             INSERT INTO EDGE similarity_edge_type VALUES (source, s, s.@sum_similarity)
+         END,
+         IF file_path != "" THEN 
+             f.println(source, s, s.@sum_similarity) 
+         END; 
+
+  // IF print_accum THEN
+      // PRINT Others[Others.@sum_similarity, Others.content, Others.@entities];
+  // END;
+   
+   /*PAGERANK STUFF*/
+    
+    Start = SELECT s
+          FROM  Others:s
+          ACCUM s.@sum_score = 1,   # Only set score of source vertices to 1
+                s.@or_is_source = true;
+  Total = Start;
+  WHILE @@max_diff > max_change
+      LIMIT max_iter DO
+      @@max_diff = 0;
+      V_tmp = SELECT t      # Only update score for activated vertices
+              FROM Start:s -(e_type:e)- :t
+              ACCUM t.@sum_received_score += s.@sum_score/(s.outdegree(e_type));
+      T = Start UNION V_tmp;
+      Start = SELECT s
+              FROM T:s
+              POST-ACCUM
+                  # For source vertices, if it's activated, then add damping; if not activated, do not need to update
+                  IF s.@or_is_source == true THEN
+                      s.@sum_score = (1.0-damping) + damping * s.@sum_received_score
+                  ELSE
+                      s.@sum_score = damping * s.@sum_received_score
+                  END,
+                  s.@sum_received_score = 0,
+                  @@max_diff += abs(s.@sum_score - s.@sum_score');
+      Total = Total UNION T;
+  END; # END WHILE loop
+
+  Total = SELECT s
+          From Total:s
+    POST-ACCUM
+              IF result_attr != "" THEN
+                  s.setAttr(result_attr, s.@sum_score)
+              END,
+
+              IF file_path != "" THEN
+                  f.println(s, s.@sum_score)
+              END,
+
+        IF print_accum THEN
+                  @@top_scores_heap += Vertex_Score(s, s.@sum_score)
+              END;
+
+  // IF print_accum THEN
+      // PRINT @@top_scores_heap as top_scores;
+  // END;
+    
+    Others = SELECT s FROM Others:s
+             ACCUM s.@score = s.@sum_similarity + 0.1 * s.@sum_score
+             ORDER BY s.@score DESC;
+            
+    PRINT Others;
+}

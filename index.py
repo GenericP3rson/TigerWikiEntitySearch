@@ -31,7 +31,7 @@ if (button_clicked):
     for i in terms.ents:
         conn.upsertEdge("Doc", "search_doc", "DOC_ENTITY", "Entity", str(i))
 
-    res = conn.runInstalledQuery("modified_jaccard", params = {"source": ("search_doc", "Doc"), "e_type": "DOC_ENTITY", "rev_e_type": "DOC_ENTITY"})
+    res = conn.runInstalledQuery("jaccard_pagerank_score", params = {"source": ("search_doc", "Doc"), "e_type": "DOC_ENTITY", "rev_e_type": "DOC_ENTITY"})
 
     conn.delVerticesById("Doc", "search_doc")
 
@@ -39,8 +39,8 @@ if (button_clicked):
 
     for i in res[0]["Others"]:
         print(f"# ({' '.join(i['v_id'].split('/')[-1].split('_'))})[{i['v_id']}]")
-        print(i["attributes"]["Others.content"])
+        print(i["attributes"]["content"])
         st.title(f"[{' '.join(i['v_id'].split('/')[-1].split('_')).capitalize()}]({i['v_id']})")
-        st.write(' '.join(i["attributes"]["Others.content"].split('\n')))
-        print(i["attributes"]["Others.@entities"])
-        st.caption('Keywords: ' + ", ".join(["".join(tag.split("\n")) for tag in i["attributes"]["Others.@entities"]]))
+        st.write(' '.join(i["attributes"]["content"].split('\n')))
+        print(i["attributes"]["@entities"])
+        st.caption('Keywords: ' + ", ".join(["".join(tag.split("\n")) for tag in i["attributes"]["@entities"]]))
