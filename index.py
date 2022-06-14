@@ -44,3 +44,4 @@ if (button_clicked):
         st.write(' '.join(i["attributes"]["content"].split('\n')))
         print(i["attributes"]["@entities"])
         st.caption('Keywords: ' + ", ".join(["".join(tag.split("\n")) for tag in i["attributes"]["@entities"]]))
+        st.caption(f'**Jaccard Similarity Score**: {i["attributes"]["@sum_similarity"]}, **PageRank Score**: {i["attributes"]["@sum_score"]}, **Final Score**: {i["attributes"]["@score"]}')
