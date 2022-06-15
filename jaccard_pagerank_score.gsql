@@ -1,6 +1,6 @@
 CREATE QUERY jaccard_pagerank_score(VERTEX source, STRING e_type, STRING rev_e_type, 
  INT top_k = 100, BOOL print_accum = TRUE, STRING similarity_edge_type = "", STRING file_path = "", FLOAT max_change=0.001, 
-  INT max_iter=25, FLOAT damping=0.85, STRING result_attr =  "", BOOL display_edges = FALSE) FOR GRAPH OurGraph { 
+  INT max_iter=25, FLOAT damping=0.85, STRING result_attr =  "", BOOL display_edges = FALSE) FOR GRAPH WikiGraph { 
 /* 
 Calculates the Jaccard Similarity between a given vertex and every other vertex.
   Jaccard similarity = intersection_size / (size_A + size_B - intersection_size)
